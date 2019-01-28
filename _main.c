@@ -9,12 +9,13 @@
 
 //#define __GL_H
 
+#include "C:\VulkanSDK\1.1.92.1\Include\vulkan\vulkan.h"
+
 #include <windows.h>
 #include <sys/stat.h>
 
 //#include "glcorearb.h"
-//#include "fnld.h"
- 
+//#include "fnld.h" 
 #include <stdlib.h>
 #include <stdio.h>
 #include <stdbool.h>
@@ -23,6 +24,10 @@
 /*Variables*/
 /*----------------------------------------------------*/
 ATOM resultRegisterClass;
+
+HANDLE eventFPSTimer;
+HANDLE hFPSTimer = NULL;
+HANDLE hTimerQueue = NULL; //By setting to null instead of storing the result of CreateTimerQueue, CreateTimerQueueTimer will use the default timer queue when the timer is created; we create a queue though, see below
 
 HDC         hDC         = NULL;
 HGLRC       hRC         = NULL;
@@ -35,6 +40,9 @@ int width, height;
 
 short int unconsumedEvents = 0;
 
+/*----------------------------------------------------*/
+/*Function Definitions*/
+/*----------------------------------------------------*/
 int WINAPI WinMain(     HINSTANCE hInstance,
                         HINSTANCE hPrevInstance,
                         LPSTR lpCmdLine,
@@ -45,6 +53,13 @@ LRESULT CALLBACK WndProc(     HWND hWnd,
                               WPARAM wParam,
                               LPARAM lParam);
 
+VOID CALLBACK FPSTimer(       PVOID lpParam,          //Optional data from CreateTimerQueueTimer
+                              BOOLEAN hasFired);      //True for timers, false for wait events
+
+
+/*----------------------------------------------------*/
+/*Function Implementations*/
+/*----------------------------------------------------*/
 int WINAPI WinMain(     HINSTANCE hInstance,
                         HINSTANCE hPrevInstance,
                         LPSTR lpCmdLine,
@@ -53,12 +68,18 @@ int WINAPI WinMain(     HINSTANCE hInstance,
       bool done = FALSE;
       globCmdShow = nCmdShow;
 
+      //+Window Variables
       WNDCLASSEX wc;
       HWND hWnd;
       MSG Msg;
       DWORD dwExStyle;
       DWORD dwStyle;
       RECT WindowRect;
+      //-Window Variables
+
+      //+Timer Var
+      DWORD resultWaitResTimer = 0;
+      //-Timer Var
 
       DWORD LastErrorCode;
       width = 640;
@@ -163,6 +184,39 @@ int WINAPI WinMain(     HINSTANCE hInstance,
             return 1;
       }
 
+      eventFPSTimer = CreateEvent(  NULL,       //No SECURITY_ATTRIBUTES struct
+                                    FALSE,      //Auto-reset
+                                    FALSE,      //Initially off
+                                    NULL);      //No name
+
+      if(GetLastError())
+      {
+            return FALSE;
+      }
+
+      hTimerQueue = CreateTimerQueue();
+
+      if(GetLastError())
+      {
+            return FALSE;
+      }
+      //20190127 - i don't know why the timer period is 8ms here vs 17ms in the WaitForSingleObject; maybe old-me wanted a 120fps screen with a 60fps fallback or something? TBD.
+      if (!CreateTimerQueueTimer(   &hFPSTimer,                         //Address of timer handle
+                                    hTimerQueue,                        //Which queue to put it in
+                                    (WAITORTIMERCALLBACK)FPSTimer,      //What callback function to use
+                                    NULL,                               //No optional parameter
+                                    20,                                 //20Ms till first fire
+                                    8,                                  //8Ms period between fires
+                                    WT_EXECUTEINTIMERTHREAD))           //Execute in this thread
+      {
+        GetLastError();
+        return FALSE;
+      }
+
+      ShowWindow(hWnd, globCmdShow);
+      SetForegroundWindow(hWnd);
+      UpdateWindow(hWnd);
+
       while (!done)
       {
             if (PeekMessage(&Msg, NULL, 0, 0, PM_REMOVE)) //Does not block.
@@ -176,6 +230,19 @@ int WINAPI WinMain(     HINSTANCE hInstance,
                         TranslateMessage(&Msg);
                         DispatchMessage(&Msg);
                   }
+            }
+
+            //60 frames per second is roughly 16.667~ milliseconds per frame
+            //17 is close enough for our needs
+            resultWaitResTimer = WaitForSingleObject(eventFPSTimer, 17);
+            if (resultWaitResTimer == WAIT_FAILED)
+            {
+                  LastErrorCode = GetLastError();
+                  return -1;
+            }
+            else if (resultWaitResTimer == WAIT_OBJECT_0)
+            {
+                  unconsumedEvents--;
             }
 
       }
@@ -235,4 +302,17 @@ LRESULT CALLBACK WndProc(     HWND hWnd,
       }
 
       return 0;
+}
+      
+VOID CALLBACK FPSTimer(       PVOID lpParam,
+                              BOOLEAN hasFired)
+{
+      if (hasFired)
+      {
+            if (unconsumedEvents < 15) //If we've missed 15 let's stop firing until it drops. Wouldn't want to overflow.
+            {      
+                  SetEvent(eventFPSTimer); 
+                  unconsumedEvents++;
+            }
+      }
 }
