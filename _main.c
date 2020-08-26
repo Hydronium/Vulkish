@@ -2,14 +2,15 @@
 #define str(s) #s
 #define xstr(s) str(s)
 
+//PellesC compiler defaults to most recent. V10 uses C17.
+//According to https://stackoverflow.com/questions/47867130/stdc-lib-ext1-availability-in-gcc-and-clang this may be pointless?
+//#define __STDC_WANT_LIB_EXT1__ 1
 
-#define __STDC_WANT_LIB_EXT1__ 1 //C compliance. To be expanded upon later...
-
-#pragma message("__STDC_WANT_LIB_EXT1__ = " xstr(__STDC_WANT_LIB_EXT1__))
+//#pragma message("__STDC_WANT_LIB_EXT1__ = " xstr(__STDC_WANT_LIB_EXT1__))
 
 //#define __GL_H
 
-#include "C:\VulkanSDK\1.1.92.1\Include\vulkan\vulkan.h"
+#include "C:\VulkanSDK\1.2.141.2\Include\vulkan\vulkan.h"
 
 #include <windows.h>
 #include <sys/stat.h>
@@ -20,6 +21,7 @@
 #include <stdio.h>
 #include <stdbool.h>
 #include <string.h>
+#include <time.h>
 /*----------------------------------------------------*/
 /*Variables*/
 /*----------------------------------------------------*/
@@ -29,9 +31,6 @@ HANDLE eventFPSTimer;
 HANDLE hFPSTimer = NULL;
 HANDLE hTimerQueue = NULL; //By setting to null instead of storing the result of CreateTimerQueue, CreateTimerQueueTimer will use the default timer queue when the timer is created; we create a queue though, see below
 
-HDC         hDC         = NULL;
-HGLRC       hRC         = NULL;
-
 bool FULLSCREEN = FALSE;
 bool INFOCUS = TRUE;
 
@@ -39,6 +38,9 @@ int globCmdShow;
 int width, height;
 
 short int unconsumedEvents = 0;
+
+char * logfilename;
+FILE * logfile;
 
 /*----------------------------------------------------*/
 /*Function Definitions*/
@@ -56,6 +58,9 @@ LRESULT CALLBACK WndProc(     HWND hWnd,
 VOID CALLBACK FPSTimer(       PVOID lpParam,          //Optional data from CreateTimerQueueTimer
                               BOOLEAN hasFired);      //True for timers, false for wait events
 
+int logCreateFile(void);
+int logMsg(char * msgtext);
+int logCloseFile(void);
 
 /*----------------------------------------------------*/
 /*Function Implementations*/
@@ -97,6 +102,10 @@ int WINAPI WinMain(     HINSTANCE hInstance,
       wc.lpszMenuName  = NULL;
       wc.lpszClassName = "Vulkish";
       wc.hIconSm       = LoadIcon(NULL, IDI_WINLOGO);
+
+      //test only
+	logCreateFile();
+      logMsg("Test message");
 
       resultRegisterClass = RegisterClassEx(&wc);
       if (!resultRegisterClass) // Attempt To Register The Window Class
@@ -250,6 +259,7 @@ int WINAPI WinMain(     HINSTANCE hInstance,
       return (Msg.wParam);
 }
 
+//2020-08-16 TODO: Add case for WM_GETMINMAXINFO for when screen size changes. Not critical.
 LRESULT CALLBACK WndProc(     HWND hWnd,
                               UINT uMSG,
                               WPARAM wParam,
@@ -293,10 +303,12 @@ LRESULT CALLBACK WndProc(     HWND hWnd,
             }
             case WM_SIZE:
             {
-                  break; //There was no break before; does it need to fall through to the default case? 20190119, TBD
+                  //break; //There was no break before; does it need to fall through to the default case? 20190119, TBD
+                  //2020-08-16 Removed break since DefWindowProc needs to be called if we are not handling the param/case.
             }
             default:
             {
+                  //When we don't know what to do, this default case ensures that all messages are handled by sending them to the default window handler code in winapi.
                   return DefWindowProc(hWnd, uMSG, wParam, lParam);
             }
       }
@@ -315,4 +327,50 @@ VOID CALLBACK FPSTimer(       PVOID lpParam,
                   unconsumedEvents++;
             }
       }
+}
+
+int logCreateFile(void)
+{
+      logfilename = malloc(sizeof logfile * L_tmpnam);
+
+      if (tmpnam(logfilename))
+      {
+            logfile = fopen(logfilename, "w+");
+            return 0;
+      }
+      return 1;
+}
+
+/*
+Simple log function. Get the current time, convert it to UTC, and then print it to the logfile with the message text.
+*/
+int logMsg(char * msgtext)
+{
+      time_t currenttime;
+      struct tm *currenttime_utc;
+
+      if (time(&currenttime) == -1)
+      {
+            return 1;//todo?
+      }
+      else
+      {
+            currenttime_utc = gmtime(&currenttime);
+      }
+      if(fprintf(logfile, "%d-%.2d-%.2d-%.2d%.2d%.2d:%s", currenttime_utc->tm_year+1900, currenttime_utc->tm_mon+1, currenttime_utc->tm_mday, currenttime_utc->tm_hour, currenttime_utc->tm_min, currenttime_utc->tm_sec, msgtext) < 0)
+      {
+            return 2;//todo?
+      }
+
+      fflush(logfile);
+      return 0;
+}
+
+int logCloseFile(void)
+{
+      if (fclose(logfile)) //fclose returns 0 for success
+      {
+            return 1;
+      }
+      return 0;
 }

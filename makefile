@@ -1,13 +1,16 @@
 #20170317 created
 #As of 20170912, this makefile builds the program correctly.
 
+#Run this file with PellesC Command Prompt by simply CDing to the directory of this makefile and typing "pomake". Note that you need to have opened the PellesC Command prompt with the arguments that set the 64bit env settings.
+
 INCLUDE = $(PellesCDir)\Include\Win;$(PellesCDir)\Include
 LIB = $(PellesCDir)\Lib\Win64;$(PellesCDir)\Lib
 
 #Looked up LoadIcon on MSDN and saw that it was part of User32.lib, so added it in here
 #wgl functions supposedly exist in opengl32...which is loadewd with LoadLibrary..
 #LINKFLAGS = gdi32.lib User32.lib kernel32.lib advapi32.lib delayimp64.lib /VERBOSE 
-LINKFLAGS = /debug /debugtype:po /subsystem:windows /machine:x64 /verbose User32.lib kernel32.lib advapi32.lib delayimp64.lib
+#LINKFLAGS = /debug /debugtype:po /subsystem:windows /machine:x64 /verbose User32.lib kernel32.lib advapi32.lib delayimp64.lib
+LINKFLAGS = /debug /debugtype:po /subsystem:windows /machine:x64 User32.lib kernel32.lib advapi32.lib delayimp64.lib
 
 Vulkish.exe : Vulkish.obj 
 	polink.exe $(LINKFLAGS) $**
